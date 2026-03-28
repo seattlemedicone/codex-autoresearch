@@ -463,7 +463,7 @@ Codex がインタラクティブモードで以前中断された run を検出
 
 終了コード：0 = 改善、1 = 改善なし、2 = ハードブロッカー。
 
-CI で `codex exec` を使う前に、Codex CLI の認証を事前に設定してください。制御された自動化環境では、単独の `exec` 実行も managed runtime の既定ポリシー `danger_full_access` に揃うよう、`codex exec --dangerously-bypass-approvals-and-sandbox ...` を優先してください。プログラム実行では API key 認証が推奨です。
+CI で `codex exec` を使う前に、Codex CLI の認証を事前に設定してください。managed runtime は現在、既定でサンドボックス付きの `workspace_write` ポリシーを使います。`codex exec --dangerously-bypass-approvals-and-sandbox ...` は、manifest と repo targets を確認したうえで、本当に `danger_full_access` が必要な場合にだけ使ってください。プログラム実行では API key 認証が推奨です。
 
 `Mode: exec` を skill 同梱の helper script で動かす場合、repo 直下の古い成果物を手動でリネームしないでください。`autoresearch_init_run.py --mode exec ...` が既定の `research-results.tsv` と `autoresearch-state.json` を `research-results.prev.tsv` と `autoresearch-state.prev.json` に自動で退避してから、新しい実行を初期化します。
 
@@ -515,9 +515,10 @@ control-plane をスクリプト化したりデバッグしたりする場合、
 - 後から同じ interactive run を別のモードで続けたい場合でも、入口は同じ `$codex-autoresearch` のままです。続行前に、skill が内部で共有 state を選んだモードへ同期し、background `start` も同じ同期を自動で行います
 - 単一リポジトリの実行は引き続きデフォルトです。この場合、宣言した scope は run-control 工程を保持する primary repo にだけ適用されます
 - 実験が複数リポジトリにまたがる場合、確認済みの launch manifest には companion repos と各 repo 固有の scope も記述できます。runtime preflight は管理対象の全 repo を検査しますが、`research-results.tsv`、`autoresearch-state.json`、runtime-control の各工件は primary repo に置かれたままです
+- このような multi-repo の `background` 実行では、後続の background `start`/`resume` の前に各 companion repo のパスを明示的に再承認する必要があります
 - このモデルでは TSV の `commit` 列は引き続き primary repo の commit だけを記録し、companion repo ごとの commit provenance は `autoresearch-state.json` に保存されます
 - `background` の各 managed runtime cycle は、runtime prompt を stdin で渡した非対話の `codex exec` セッションとして実行されます
-- `execution_policy` はネストした Codex セッションを起動する経路、つまり `background` と `exec` にだけ適用されます。この skill の既定値は `danger_full_access` です
+- `execution_policy` はネストした Codex セッションを起動する経路、つまり `background` と `exec` にだけ適用されます。この skill の既定値は現在 `workspace_write` であり、明示的に `danger_full_access` を要求しない限り、分離された Codex セッションは `--full-auto` で動作します
 - その後の `status`、`stop`、`resume` も同じ `$codex-autoresearch` から行いますが、`status/stop` は `background` にだけ適用されます
 - `Mode: exec` は、CI や完全に指定された自動化向けの上級パスとして残ります
 

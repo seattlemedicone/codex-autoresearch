@@ -465,7 +465,7 @@ Modo nao interativo para pipelines de automacao. Toda a configuracao e fornecida
 
 Codigos de saida: 0 = melhorou, 1 = sem melhoria, 2 = bloqueio duro.
 
-Antes de usar `codex exec` em CI, configure antecipadamente a autenticacao do CLI do Codex. Em ambientes de automacao controlados, prefira `codex exec --dangerously-bypass-approvals-and-sandbox ...` para que as execucoes `exec` independentes sigam a politica padrao `danger_full_access` do runtime gerenciado. Para execucoes programaticas, a autenticacao por API key e a opcao preferida.
+Antes de usar `codex exec` em CI, configure antecipadamente a autenticacao do CLI do Codex. O runtime gerenciado agora usa por padrao a politica com sandbox `workspace_write`. Use `codex exec --dangerously-bypass-approvals-and-sandbox ...` apenas quando voce realmente precisar de `danger_full_access` e ja tiver revisado o manifest e os repo targets. Para execucoes programaticas, a autenticacao por API key e a opcao preferida.
 
 Quando `Mode: exec` roda pelos helper scripts empacotados com a skill, nao renomeie manualmente os artefatos antigos na raiz do repo. `autoresearch_init_run.py --mode exec ...` ja arquiva `research-results.tsv` e `autoresearch-state.json` com os nomes canonicos `research-results.prev.tsv` e `autoresearch-state.prev.json` antes de iniciar a nova execucao.
 
@@ -517,9 +517,10 @@ Para usuarios humanos, agora existe apenas uma entrada principal: **`$codex-auto
 - Se depois quiser continuar esse mesmo run interativo no outro modo, continue usando a mesma entrada `$codex-autoresearch`; antes de prosseguir, a skill sincroniza internamente o estado compartilhado com o modo escolhido, e background `start` executa automaticamente a mesma sincronizacao
 - Execucoes em um unico repositorio continuam sendo o padrao; nesse caso, o scope declarado se aplica apenas ao repositorio primario que guarda os artefatos de controle
 - Se o experimento abranger varios repositorios, o launch manifest confirmado tambem pode declarar companion repos, cada um com seu proprio scope. O preflight do runtime verifica todos os repositorios gerenciados, enquanto `research-results.tsv`, `autoresearch-state.json` e os artefatos de controle continuam ancorados no repositorio primario
+- Para esse tipo de execucao multi-repo em `background`, cada caminho de companion repo precisa ser reaprovado explicitamente antes de um futuro background `start`/`resume`
 - Nesse modelo, a coluna `commit` do TSV continua registrando apenas o commit do repositorio primario; a proveniencia de commits por repositorio para os companion repos fica em `autoresearch-state.json`
 - Cada ciclo gerenciado em `background` executa uma sessao nao interativa de `codex exec`, passando o prompt do runtime via stdin
-- `execution_policy` so se aplica aos caminhos que iniciam sessoes Codex aninhadas, isto e, `background` e `exec`; este skill usa `danger_full_access` por padrao
+- `execution_policy` so se aplica aos caminhos que iniciam sessoes Codex aninhadas, isto e, `background` e `exec`; este skill agora usa `workspace_write` por padrao, de modo que sessoes Codex destacadas rodam com `--full-auto` salvo quando `danger_full_access` for solicitado explicitamente
 - Pedidos posteriores de `status`, `stop` ou `resume` continuam passando pelo mesmo `$codex-autoresearch`; `status/stop` so valem para `background`
 - `Mode: exec` continua sendo o caminho avancado para CI ou automacao totalmente especificada
 

@@ -478,7 +478,7 @@ Non-interactive mode for automation pipelines. All config is provided upfront --
 
 Exit codes: 0 = improved, 1 = no improvement, 2 = hard blocker.
 
-Before using `codex exec` in CI, configure Codex CLI authentication in advance. In controlled automation environments, prefer `codex exec --dangerously-bypass-approvals-and-sandbox ...` so standalone exec runs match the managed runtime's default `danger_full_access` policy. For programmatic runs, API key authentication is the preferred option.
+Before using `codex exec` in CI, configure Codex CLI authentication in advance. The managed runtime now defaults to the sandboxed `workspace_write` policy. Only opt into `codex exec --dangerously-bypass-approvals-and-sandbox ...` when you intentionally need `danger_full_access` and have reviewed the manifest and repo targets. For programmatic runs, API key authentication is the preferred option.
 
 When the bundled helper scripts drive `Mode: exec`, let `autoresearch_init_run.py --mode exec ...` archive prior repo-root artifacts automatically. With the default filenames it rotates `research-results.tsv` to `research-results.prev.tsv` and `autoresearch-state.json` to `autoresearch-state.prev.json`; do not hand-rename those files first. Also keep `autoresearch_exec_state.py --cleanup` as the final serial helper step, after the last `autoresearch_record_iteration.py` / `autoresearch_select_parallel_batch.py` call.
 
@@ -529,11 +529,11 @@ Human-facing usage now has a single entrypoint: **`$codex-autoresearch`**.
 - Foreground and background share the same loop protocol, metric semantics, and repo/scope rules, but they are mutually exclusive for a given repo/run. Do not run both modes at the same time against the same primary repo artifacts.
 - If you resume an existing interactive run in the other mode, keep using the same `$codex-autoresearch` entrypoint. The shared state must be synchronized to the chosen mode before continuing; scripted background `start` does that automatically, and the interactive skill flow should handle the same step for foreground continuation.
 - Single-repo runs remain the default: the declared scope applies to the primary repo that owns the run-control artifacts.
-- For cross-repo experiments, both modes can declare companion repos with their own scopes. `research-results.tsv` and `autoresearch-state.json` remain anchored in the primary repo, and background mode also keeps launch/runtime control files there.
+- For cross-repo experiments, both modes can declare companion repos with their own scopes. `research-results.tsv` and `autoresearch-state.json` remain anchored in the primary repo, and background mode also keeps launch/runtime control files there. Background `start`/`resume` now requires explicit re-approval of each companion repo path before a stored launch manifest can manage it again.
 - In that model, the TSV `commit` column still tracks the primary repo commit, while `autoresearch-state.json` can carry per-repo commit provenance for companion repos.
 - Script-level entrypoints accept repeated `--companion-repo-scope PATH=SCOPE` flags when you need to seed that structure directly.
 - Each background runtime cycle launches a non-interactive `codex exec` session with the runtime prompt fed on stdin, so it does not depend on the interactive TUI.
-- `execution_policy` applies only to paths that spawn nested Codex sessions: background managed runs and `exec`. In this skill the default is `danger_full_access`, which means detached Codex sessions run with `--dangerously-bypass-approvals-and-sandbox` unless a caller explicitly opts into the sandboxed `workspace_write` path.
+- `execution_policy` applies only to paths that spawn nested Codex sessions: background managed runs and `exec`. In this skill the default is now `workspace_write`, which means detached Codex sessions run with `--full-auto` unless a caller explicitly opts into `danger_full_access`.
 - If the background runtime cannot launch that `codex exec` session at all, it transitions to `needs_human` instead of silently falling back to an idle state.
 - If an explicit stop request cannot actually terminate the detached runner, the background runtime also transitions to `needs_human` instead of pretending the run is fully stopped.
 - Before the background runtime starts a session or relaunches one, it runs a script-level preflight: `autoresearch_health_check.py` for integrity checks and `autoresearch_commit_gate.py` for scope-aware git safety.

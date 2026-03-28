@@ -152,7 +152,13 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
                         "terminal_reason": "completed",
                         "pid": 12345,
                         "pgid": None,
-                        "command": [],
+                        "command": [
+                            sys.executable,
+                            str(SCRIPTS_DIR / "autoresearch_runtime_ctl.py"),
+                            "run",
+                            "--repo",
+                            str(tmpdir.resolve()),
+                        ],
                         "requested_stop_at": None,
                         "last_decision": "stop",
                         "last_reason": "completed",
@@ -249,7 +255,7 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
 
             state = json.loads((tmpdir / "autoresearch-state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["config"]["session_mode"], "background")
-            self.assertEqual(state["config"]["execution_policy"], "danger_full_access")
+            self.assertEqual(state["config"]["execution_policy"], "workspace_write")
 
             stopped = self.run_script(
                 "autoresearch_runtime_ctl.py",
@@ -348,12 +354,16 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
                 str(primary),
                 "--codex-bin",
                 str(fake_codex_path),
+                "--allow-companion-repo",
+                str(companion_a),
+                "--allow-companion-repo",
+                str(companion_b),
             )
             self.assertEqual(restarted["status"], "running")
 
             state = json.loads((primary / "autoresearch-state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["config"]["session_mode"], "background")
-            self.assertEqual(state["config"]["execution_policy"], "danger_full_access")
+            self.assertEqual(state["config"]["execution_policy"], "workspace_write")
 
             stopped = self.run_script(
                 "autoresearch_runtime_ctl.py",
@@ -394,7 +404,13 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
                         "terminal_reason": "completed",
                         "pid": 12345,
                         "pgid": None,
-                        "command": [],
+                        "command": [
+                            sys.executable,
+                            str(SCRIPTS_DIR / "autoresearch_runtime_ctl.py"),
+                            "run",
+                            "--repo",
+                            str(repo.resolve()),
+                        ],
                         "requested_stop_at": None,
                         "last_decision": "stop",
                         "last_reason": "completed",
@@ -593,7 +609,13 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
                         "terminal_reason": "none",
                         "pid": 4242,
                         "pgid": 4242,
-                        "command": [],
+                        "command": [
+                            sys.executable,
+                            str(SCRIPTS_DIR / "autoresearch_runtime_ctl.py"),
+                            "run",
+                            "--repo",
+                            str(tmpdir.resolve()),
+                        ],
                         "requested_stop_at": None,
                         "last_decision": "",
                         "last_reason": "",
@@ -620,6 +642,20 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
                     "wait_for_process_exit",
                     side_effect=[False, False],
                 ),
+                mock.patch.object(
+                    autoresearch_runtime_ops.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess(
+                        args=["ps"],
+                        returncode=0,
+                        stdout=(
+                            f"{sys.executable} "
+                            f"{SCRIPTS_DIR / 'autoresearch_runtime_ctl.py'} run "
+                            f"--repo {tmpdir}"
+                        ),
+                        stderr="",
+                    ),
+                ),
                 mock.patch.object(autoresearch_runtime_ops.os, "killpg") as killpg,
             ):
                 stopped = autoresearch_runtime_ops.stop_runtime(args)
@@ -638,6 +674,101 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
             self.assertEqual(runtime["status"], "needs_human")
             self.assertEqual(runtime["terminal_reason"], "stop_failed")
             self.assertIn("remained alive after SIGKILL", runtime["last_error"])
+
+    def test_stop_runtime_refuses_unverified_live_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            runtime_path = tmpdir / "autoresearch-runtime.json"
+            runtime_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "repo": str(tmpdir),
+                        "launch_path": str(tmpdir / "autoresearch-launch.json"),
+                        "results_path": str(tmpdir / "research-results.tsv"),
+                        "state_path": str(tmpdir / "autoresearch-state.json"),
+                        "log_path": str(tmpdir / "autoresearch-runtime.log"),
+                        "status": "running",
+                        "terminal_reason": "none",
+                        "pid": 4242,
+                        "pgid": 4242,
+                        "command": [],
+                        "requested_stop_at": None,
+                        "last_decision": "",
+                        "last_reason": "",
+                        "last_seen_iteration": None,
+                        "last_seen_status": "",
+                        "created_at": "2026-03-21T00:00:00Z",
+                        "updated_at": "2026-03-21T00:00:00Z",
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            args = argparse.Namespace(
+                repo=str(tmpdir),
+                runtime_path=None,
+                grace_seconds=0.0,
+            )
+            with (
+                mock.patch.object(autoresearch_runtime_ops, "pid_is_alive", return_value=True),
+                mock.patch.object(
+                    autoresearch_runtime_ops.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess(
+                        args=["ps"],
+                        returncode=0,
+                        stdout="/usr/bin/python3 /tmp/not-the-runtime.py",
+                        stderr="",
+                    ),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    autoresearch_runtime_ops.AutoresearchError,
+                    "refusing to stop",
+                ):
+                    autoresearch_runtime_ops.stop_runtime(args)
+
+    def test_runtime_start_requires_explicit_companion_repo_allowlist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tools_tmp:
+            root = Path(tmp)
+            tool_dir = Path(tools_tmp)
+            primary = root / "primary"
+            companion = root / "companion"
+            primary.mkdir()
+            companion.mkdir()
+            fake_codex_path = tool_dir / "fake-codex"
+            self.write_sleeping_fake_codex(fake_codex_path)
+
+            self.create_launch_manifest(
+                primary,
+                companion_repo_scopes=[f"{companion}=pkg/"],
+            )
+
+            blocked = self.run_script_completed(
+                "autoresearch_runtime_ctl.py",
+                "start",
+                "--repo",
+                str(primary),
+                "--codex-bin",
+                str(fake_codex_path),
+            )
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertIn("require explicit re-approval", blocked.stderr)
+
+            started = self.run_script(
+                "autoresearch_runtime_ctl.py",
+                "start",
+                "--repo",
+                str(primary),
+                "--codex-bin",
+                str(fake_codex_path),
+                "--allow-companion-repo",
+                str(companion),
+            )
+            self.assertEqual(started["status"], "running")
 
     def test_runtime_status_reports_stop_failed_even_if_pid_still_alive(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1061,8 +1192,8 @@ class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
             codex_args = args_path.read_text(encoding="utf-8")
             self.assertIn("$codex-autoresearch", prompt_text)
             self.assertIn("Reduce failures in this repo", prompt_text)
-            self.assertIn("--dangerously-bypass-approvals-and-sandbox", codex_args)
-            self.assertNotIn("--full-auto", codex_args)
+            self.assertIn("--full-auto", codex_args)
+            self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", codex_args)
             self.assertTrue(results_path.exists())
             self.assertTrue(state_path.exists())
 

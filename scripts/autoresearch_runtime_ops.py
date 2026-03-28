@@ -21,6 +21,7 @@ from autoresearch_helpers import (
     default_runtime_state_path,
     repo_targets_from_config,
     read_launch_manifest,
+    resolve_repo_target_path,
     resolve_state_path,
     resolve_state_path_for_log,
     sync_state_session_mode,
@@ -49,6 +50,66 @@ from autoresearch_runtime_common import (
 
 STOP_POLL_INTERVAL_SECONDS = 0.1
 STOP_KILL_WAIT_SECONDS = 1.0
+
+
+def raw_allowed_companion_repo_args(args: argparse.Namespace) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for spec in list(getattr(args, "companion_repo_scope", []) or []):
+        if "=" not in spec:
+            raise AutoresearchError(
+                f"Expected PATH=SCOPE for companion repo scope, got: {spec!r}"
+            )
+        raw_path, _ = spec.split("=", 1)
+        candidate = raw_path.strip()
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            values.append(candidate)
+    for raw in list(getattr(args, "allow_companion_repo", []) or []):
+        candidate = str(raw).strip()
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            values.append(candidate)
+    return values
+
+
+def allowed_companion_repo_paths(
+    *,
+    repo: Path,
+    args: argparse.Namespace,
+) -> set[str]:
+    return {
+        str(resolve_repo_target_path(repo, raw_path))
+        for raw_path in raw_allowed_companion_repo_args(args)
+    }
+
+
+def validate_runtime_repo_targets(
+    *,
+    repo: Path,
+    launch_manifest: dict[str, Any],
+    allowed_companion_paths: set[str],
+) -> list[Any]:
+    repo = repo.resolve()
+    repo_targets = repo_targets_from_config(repo, dict(launch_manifest.get("config", {})))
+    unexpected_companions: list[str] = []
+    for target in repo_targets:
+        resolved = target.path.resolve()
+        if target.role == "primary":
+            if resolved != repo:
+                raise AutoresearchError(
+                    "Launch manifest primary repo does not match the requested runtime repo."
+                )
+            continue
+        if str(resolved) not in allowed_companion_paths:
+            unexpected_companions.append(str(resolved))
+    if unexpected_companions:
+        raise AutoresearchError(
+            "Launch manifest companion repos require explicit re-approval via "
+            "--allow-companion-repo PATH (or the matching --companion-repo-scope during launch): "
+            + ", ".join(sorted(unexpected_companions))
+        )
+    return repo_targets
 
 
 def build_codex_exec_command(
@@ -318,6 +379,7 @@ def evaluate_runtime_preflight(
     results_path: Path,
     state_path_arg: str | None,
     launch_manifest: dict[str, Any],
+    repo_targets: list[Any] | None,
     min_free_mb: int,
 ) -> dict[str, Any]:
     config = dict(launch_manifest.get("config", {}))
@@ -327,7 +389,7 @@ def evaluate_runtime_preflight(
         state_path_arg=state_path_arg,
         verify_command=str(config.get("verify", "")),
         commit_phase="precommit",
-        repo_targets=repo_targets_from_config(repo, config),
+        repo_targets=repo_targets or repo_targets_from_config(repo, config),
         min_free_mb=min_free_mb,
         include_health=True,
         rollback_policy=str(config.get("rollback_policy") or ""),
@@ -363,6 +425,11 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
         raise AutoresearchError(f"Missing JSON file: {launch_path}")
 
     launch_manifest = read_launch_manifest(launch_path)
+    repo_targets = validate_runtime_repo_targets(
+        repo=repo,
+        launch_manifest=launch_manifest,
+        allowed_companion_paths=allowed_companion_repo_paths(repo=repo, args=args),
+    )
     execution_policy = str(
         launch_manifest.get("config", {}).get("execution_policy") or DEFAULT_EXECUTION_POLICY
     )
@@ -375,6 +442,7 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
         results_path=results_path,
         state_path_arg=state_path_arg,
         launch_manifest=launch_manifest,
+        repo_targets=repo_targets,
         min_free_mb=args.min_free_mb,
     )
     if preflight["decision"] == "block":
@@ -415,6 +483,8 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
         command.extend(["--state-path", state_path_arg])
     for value in args.codex_arg:
         command.extend(["--codex-arg", value])
+    for value in raw_allowed_companion_repo_args(args):
+        command.extend(["--allow-companion-repo", value])
 
     process = subprocess.Popen(
         command,
@@ -493,6 +563,11 @@ def run_runtime(args: argparse.Namespace) -> int:
     repo = resolve_repo_path(args.repo)
     launch_path = resolve_repo_relative(repo, args.launch_path, default_launch_manifest_path(repo))
     launch_manifest = read_launch_manifest(launch_path)
+    repo_targets = validate_runtime_repo_targets(
+        repo=repo,
+        launch_manifest=launch_manifest,
+        allowed_companion_paths=allowed_companion_repo_paths(repo=repo, args=args),
+    )
     results_path = resolve_repo_relative(repo, args.results_path, repo / DEFAULT_RESULTS_PATH)
     runtime_path = resolve_repo_relative(repo, args.runtime_path, default_runtime_state_path(repo))
     log_path = resolve_repo_relative(repo, args.log_path, default_runtime_log_path(repo))
@@ -542,6 +617,7 @@ def run_runtime(args: argparse.Namespace) -> int:
             results_path=results_path,
             state_path_arg=state_path_arg,
             launch_manifest=launch_manifest,
+            repo_targets=repo_targets,
             min_free_mb=args.min_free_mb,
         )
         runtime["last_health_check"] = preflight["health_check"]
@@ -659,7 +735,47 @@ def stop_runtime(args: argparse.Namespace) -> dict[str, Any]:
         raise AutoresearchError(f"No runtime file found at {runtime_path}")
 
     pid = runtime.get("pid")
-    pgid = runtime.get("pgid") or pid
+    runtime_repo = Path(str(runtime.get("repo") or "")).resolve()
+    if runtime_repo != repo.resolve():
+        raise AutoresearchError(
+            "Runtime state repo does not match the requested runtime repo; refusing to stop."
+        )
+    if not isinstance(pid, int) or pid <= 0:
+        raise AutoresearchError("Runtime state is missing a valid pid; refusing to stop.")
+    pgid = runtime.get("pgid")
+    if pgid not in {None, pid}:
+        raise AutoresearchError(
+            "Runtime state contains unexpected process-group metadata; refusing to stop."
+        )
+    expected_runner = str(Path(__file__).resolve().with_name("autoresearch_runtime_ctl.py"))
+    stored_command = " ".join(str(part) for part in runtime.get("command") or [])
+    if (
+        expected_runner not in stored_command
+        or " run " not in f" {stored_command} "
+        or str(repo) not in stored_command
+    ):
+        raise AutoresearchError(
+            "Runtime state is missing the expected runtime command metadata; refusing to stop."
+        )
+    if pid_is_alive(pid):
+        try:
+            completed = subprocess.run(
+                ["ps", "-ww", "-o", "command=", "-p", str(pid)],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+        except (PermissionError, OSError):
+            completed = None
+        if completed is not None and completed.returncode == 0:
+            process_command = completed.stdout.strip()
+            if process_command and (
+                expected_runner not in process_command or " run " not in f" {process_command} "
+            ):
+                raise AutoresearchError(
+                    "Live pid does not look like the autoresearch runtime controller; refusing to stop."
+                )
+    pgid = pid
     runtime["requested_stop_at"] = utc_now()
     persist_runtime(runtime_path, runtime)
 

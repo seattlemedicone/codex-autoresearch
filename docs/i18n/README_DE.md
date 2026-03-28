@@ -463,7 +463,7 @@ Nicht-interaktiver Modus fuer Automatisierungspipelines. Die gesamte Konfigurati
 
 Exit-Codes: 0 = verbessert, 1 = keine Verbesserung, 2 = harte Blockade.
 
-Bevor Sie `codex exec` in CI verwenden, konfigurieren Sie die Codex-CLI-Authentifizierung im Voraus. In kontrollierten Automatisierungsumgebungen sollten Sie `codex exec --dangerously-bypass-approvals-and-sandbox ...` bevorzugen, damit eigenstaendige `exec`-Laeufe dieselbe Standardrichtlinie `danger_full_access` wie die Managed Runtime verwenden. Fuer programmatische Laeufe ist API-Key-Authentifizierung die bevorzugte Option.
+Bevor Sie `codex exec` in CI verwenden, konfigurieren Sie die Codex-CLI-Authentifizierung im Voraus. Die Managed Runtime verwendet jetzt standardmaessig die sandboxed Richtlinie `workspace_write`. Greifen Sie nur dann zu `codex exec --dangerously-bypass-approvals-and-sandbox ...`, wenn Sie bewusst `danger_full_access` benoetigen und Manifest sowie Repo-Targets geprueft haben. Fuer programmatische Laeufe ist API-Key-Authentifizierung die bevorzugte Option.
 
 Wenn `Mode: exec` ueber die mit der Skill gebuendelten Helper-Skripte laeuft, benennen Sie alte Artefakte im Repo-Root nicht manuell um. `autoresearch_init_run.py --mode exec ...` archiviert die Standarddateien `research-results.tsv` und `autoresearch-state.json` selbststaendig als `research-results.prev.tsv` bzw. `autoresearch-state.prev.json`, bevor der neue Lauf initialisiert wird.
 
@@ -515,9 +515,10 @@ Fuer Menschen gibt es jetzt nur noch einen einzigen Haupteinstieg: **`$codex-aut
 - Wenn Sie denselben interaktiven Run spaeter im anderen Modus fortsetzen wollen, bleiben Sie beim selben `$codex-autoresearch`-Einstiegspunkt; vor dem Fortsetzen synchronisiert die Skill-Logik den gemeinsamen State intern auf den Zielmodus, und background `start` fuehrt denselben Schritt automatisch aus
 - Einzelne Repositories bleiben der Standardfall; dann gilt der deklarierte Scope nur fuer das Primaer-Repository, das die Run-Control-Artefakte traegt
 - Wenn das Experiment mehrere Repositories umfasst, kann das bestaetigte Launch-Manifest auch Companion-Repositories mit jeweils eigenem Scope enthalten. Die Runtime-Preflight-Pruefung deckt dann alle verwalteten Repositories ab, waehrend `research-results.tsv`, `autoresearch-state.json` und die Runtime-Control-Artefakte im Primaer-Repository verankert bleiben
+- Bei solchen Multi-Repo-Background-Laeufen muessen die Pfade der Companion-Repositories vor einem spaeteren background `start`/`resume` erneut explizit freigegeben werden
 - In diesem Modell bleibt die TSV-Spalte `commit` beim Commit des Primaer-Repositories; die Commit-Provenienz der Companion-Repositories steht stattdessen in `autoresearch-state.json`
 - Jeder weitere verwaltete `background`-Laufzyklus startet eine nicht-interaktive `codex exec`-Sitzung und uebergibt den Runtime-Prompt ueber stdin
-- `execution_policy` gilt nur fuer Pfade, die verschachtelte Codex-Sitzungen starten, also fuer `background` und `exec`; dieses Skill verwendet standardmaessig `danger_full_access`
+- `execution_policy` gilt nur fuer Pfade, die verschachtelte Codex-Sitzungen starten, also fuer `background` und `exec`; dieses Skill verwendet standardmaessig `workspace_write`, sodass abgetrennte Codex-Sitzungen `--full-auto` nutzen, sofern nicht explizit `danger_full_access` angefordert wird
 - Spaetere Anfragen wie `status`, `stop` oder `resume` laufen weiterhin ueber dasselbe `$codex-autoresearch`; `status/stop` gelten nur fuer `background`
 - `Mode: exec` bleibt der erweiterte Pfad fuer CI und voll spezifizierte Automatisierung
 

@@ -573,7 +573,7 @@ The public human workflow now stays on a single entrypoint: `$codex-autoresearch
    Script-level entrypoints represent this with repeated `--companion-repo-scope PATH=SCOPE` flags.
    The TSV `commit` column remains the primary repo commit; companion-repo commit provenance lives in `autoresearch-state.json`.
 10. Each background runtime cycle launches a non-interactive `codex exec` session with the runtime prompt supplied on stdin.
-   Background launch manifests carry an `execution_policy`; this skill now defaults to `danger_full_access`, so detached sessions run with `--dangerously-bypass-approvals-and-sandbox` unless you explicitly opt back into the sandboxed `workspace_write` path.
+   Background launch manifests carry an `execution_policy`; this skill now defaults to the sandboxed `workspace_write` path, so detached sessions run with `--full-auto` unless you explicitly opt into `danger_full_access`.
 11. Before each background detached session or relaunch, the runtime controller runs `autoresearch_health_check.py` and `autoresearch_commit_gate.py` so integrity and scope safety are enforced at the control-plane boundary across all managed repos.
 12. If background `codex exec` itself cannot be launched, the runtime moves to `needs_human` instead of silently looking idle.
 13. If an explicit stop request cannot actually terminate the detached runner, the runtime also moves to `needs_human` instead of pretending the run is fully stopped.

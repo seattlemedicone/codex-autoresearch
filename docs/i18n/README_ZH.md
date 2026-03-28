@@ -461,7 +461,7 @@ security + fix               # 审计并修复一步到位
 
 退出码：0 = 已改善，1 = 无改善，2 = 硬阻塞。
 
-在 CI 中使用 `codex exec` 前，请先配置好 Codex CLI 认证。在受控自动化环境里，建议优先使用 `codex exec --dangerously-bypass-approvals-and-sandbox ...`，这样独立 `exec` 运行会与托管 runtime 默认的 `danger_full_access` 策略保持一致。对于程序化运行，优先使用 API key 认证。
+在 CI 中使用 `codex exec` 前，请先配置好 Codex CLI 认证。托管 runtime 现在默认使用带沙箱的 `workspace_write` 策略。只有在你明确需要 `danger_full_access`，并且已经审查过 manifest 与 repo targets 时，才应使用 `codex exec --dangerously-bypass-approvals-and-sandbox ...`。对于程序化运行，优先使用 API key 认证。
 
 如果 `Mode: exec` 由 skill 自带的 helper scripts 驱动，不要先手工重命名 repo 根目录中的旧工件。`autoresearch_init_run.py --mode exec ...` 会自动把默认的 `research-results.tsv` 和 `autoresearch-state.json` 归档为 `research-results.prev.tsv` 和 `autoresearch-state.prev.json`，然后再初始化新的执行。
 
@@ -513,9 +513,10 @@ iteration  commit   metric  delta   status    description
 - 如果之后想把同一个交互 run 切到另一种模式，仍然通过同一个 `$codex-autoresearch` 入口继续；继续之前，skill 会在内部先把共享 state 同步到目标模式，background `start` 也会自动完成同样的同步
 - 单仓运行仍然是默认形态；此时声明的 scope 只作用于承载 run-control 工件的主仓库
 - 如果实验跨多个仓库，确认后的 launch manifest 也可以声明 companion repos，并为每个仓库单独给出 scope。runtime preflight 会检查所有托管仓库，但 `research-results.tsv`、`autoresearch-state.json` 以及 runtime-control 工件仍然锚定在主仓库
+- 对于这类多仓后台运行，在后续执行 background `start`/`resume` 之前，必须重新显式批准每个 companion repo 路径
 - 在这种模型下，TSV 的 `commit` 列仍然只记录主仓库提交；companion repo 的逐仓 commit provenance 则记录在 `autoresearch-state.json` 中
 - 之后每个 background 托管循环都会启动一个非交互式 `codex exec` 会话，并通过 stdin 传入 runtime prompt
-- `execution_policy` 只作用于会再拉起嵌套 Codex 会话的路径，也就是 background 托管循环和 `exec`；当前 skill 默认是 `danger_full_access`
+- `execution_policy` 只作用于会再拉起嵌套 Codex 会话的路径，也就是 background 托管循环和 `exec`；当前 skill 默认是 `workspace_write`，因此分离的 Codex 会话会使用 `--full-auto`，除非调用方明确选择 `danger_full_access`
 - 之后如果想看状态、停止、恢复，仍然通过 `$codex-autoresearch` 这个 skill 来做；其中 `status/stop` 只适用于 background 运行
 - `Mode: exec` 仍然保留给 CI / 高级自动化
 

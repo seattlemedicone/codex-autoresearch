@@ -137,7 +137,7 @@ class AutoresearchForegroundModeTest(AutoresearchScriptsTestBase):
             )
 
             state = json.loads(state_path.read_text(encoding="utf-8"))
-            self.assertEqual(state["config"]["execution_policy"], "danger_full_access")
+            self.assertEqual(state["config"]["execution_policy"], "workspace_write")
 
             result = self.run_script(
                 "autoresearch_set_session_mode.py",

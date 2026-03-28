@@ -465,7 +465,7 @@ Mode non interactif pour les pipelines d'automatisation. Toute la configuration 
 
 Codes de sortie : 0 = ameliore, 1 = pas d'amelioration, 2 = bloqueur critique.
 
-Avant d'utiliser `codex exec` en CI, configurez a l'avance l'authentification du CLI Codex. Dans un environnement d'automatisation controle, privilegiez `codex exec --dangerously-bypass-approvals-and-sandbox ...` afin que les executions `exec` autonomes suivent la politique par defaut `danger_full_access` de la runtime geree. Pour les executions programmatiques, l'authentification par API key est l'option a privilegier.
+Avant d'utiliser `codex exec` en CI, configurez a l'avance l'authentification du CLI Codex. La runtime geree utilise maintenant par defaut la politique sandboxee `workspace_write`. N'utilisez `codex exec --dangerously-bypass-approvals-and-sandbox ...` que si vous avez volontairement besoin de `danger_full_access` et que vous avez relu le manifest ainsi que les repo targets. Pour les executions programmatiques, l'authentification par API key est l'option a privilegier.
 
 Lorsque `Mode: exec` passe par les helpers livres avec la skill, ne renommez pas manuellement les anciens artefacts a la racine du repo. `autoresearch_init_run.py --mode exec ...` archive deja `research-results.tsv` et `autoresearch-state.json` sous les noms canoniques `research-results.prev.tsv` et `autoresearch-state.prev.json` avant d'initialiser une nouvelle execution.
 
@@ -517,9 +517,10 @@ Pour les utilisateurs humains, il n'y a maintenant plus qu'un seul point d'entre
 - Si vous voulez ensuite reprendre ce meme run interactif dans l'autre mode, restez sur la meme entree `$codex-autoresearch` ; avant la reprise, la skill synchronise en interne l'etat partage vers le mode cible, et background `start` effectue automatiquement la meme synchronisation
 - Les executions sur un seul depot restent le cas par defaut ; dans ce cas, le scope declare ne s'applique qu'au depot primaire qui porte les artefacts de controle
 - Si l'experience couvre plusieurs depots, le manifeste de lancement confirme peut aussi declarer des depots companions avec un scope distinct pour chacun. Le preflight du runtime couvre alors tous les depots geres, tandis que `research-results.tsv`, `autoresearch-state.json` et les artefacts de controle restent ancres dans le depot primaire
+- Pour ce type d'execution multi-depots en `background`, chaque chemin de depot companion doit etre re-approuve explicitement avant un futur background `start`/`resume`
 - Dans ce modele, la colonne `commit` du TSV continue de suivre uniquement le commit du depot primaire ; la provenance des commits des depots companions est conservee dans `autoresearch-state.json`
 - Chaque cycle gere en `background` lance ensuite une session `codex exec` non interactive, avec le prompt runtime transmis via stdin
-- `execution_policy` ne s'applique qu'aux chemins qui lancent des sessions Codex imbriquees, donc `background` et `exec` ; ce skill utilise `danger_full_access` par defaut
+- `execution_policy` ne s'applique qu'aux chemins qui lancent des sessions Codex imbriquees, donc `background` et `exec` ; ce skill utilise maintenant `workspace_write` par defaut, de sorte que les sessions Codex detachees passent par `--full-auto` sauf si `danger_full_access` est demande explicitement
 - Les demandes ulterieures comme `status`, `stop` ou `resume` passent toujours par le meme `$codex-autoresearch` ; `status/stop` ne valent que pour `background`
 - `Mode: exec` reste la voie avancee pour le CI ou l'automatisation entierement specifiee
 

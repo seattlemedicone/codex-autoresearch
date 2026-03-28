@@ -463,7 +463,7 @@ Codex가 인터랙티브 모드에서 이전에 중단된 run 을 감지하면 �
 
 종료 코드: 0 = 개선됨, 1 = 개선 없음, 2 = 하드 블로커.
 
-CI에서 `codex exec`를 사용하기 전에 Codex CLI 인증을 미리 구성하세요. 통제된 자동화 환경에서는 독립적인 `exec` 실행도 managed runtime 의 기본 정책 `danger_full_access` 와 맞추기 위해 `codex exec --dangerously-bypass-approvals-and-sandbox ...` 사용을 권장합니다. 프로그래밍 방식 실행에는 API key 인증이 권장됩니다.
+CI에서 `codex exec`를 사용하기 전에 Codex CLI 인증을 미리 구성하세요. managed runtime 은 이제 기본적으로 샌드박스된 `workspace_write` 정책을 사용합니다. manifest 와 repo targets 를 검토했고 정말 `danger_full_access` 가 필요할 때만 `codex exec --dangerously-bypass-approvals-and-sandbox ...` 를 사용하세요. 프로그래밍 방식 실행에는 API key 인증이 권장됩니다.
 
 `Mode: exec` 를 skill 에 포함된 helper script 로 구동할 때는 repo 루트의 기존 아티팩트를 수동으로 이름 변경하지 마세요. `autoresearch_init_run.py --mode exec ...` 가 기본 `research-results.tsv` 와 `autoresearch-state.json` 을 `research-results.prev.tsv` 와 `autoresearch-state.prev.json` 으로 자동 보관한 뒤 새 실행을 초기화합니다.
 
@@ -515,9 +515,10 @@ control-plane 을 스크립팅하거나 디버깅할 때는 repo 중심 helper �
 - 나중에 같은 interactive run 을 다른 모드로 이어가고 싶더라도, 계속 같은 `$codex-autoresearch` 진입점을 사용해야 합니다. 이어가기 전에 skill 이 내부적으로 공유 state 를 목표 모드로 동기화하며, background `start` 도 같은 동기화를 자동으로 수행합니다
 - 단일 저장소 실행은 여전히 기본 경로이며, 이 경우 선언한 scope 는 run-control 아티팩트를 보관하는 primary repo 에만 적용됩니다
 - 실험이 여러 저장소에 걸치면, 확인된 launch manifest 에 companion repos 와 각 저장소별 scope 를 함께 선언할 수 있습니다. runtime preflight 는 모든 managed repo 를 검사하지만 `research-results.tsv`, `autoresearch-state.json`, 그리고 runtime-control 아티팩트는 계속 primary repo 에 남습니다
+- 이런 다중 저장소 background 실행에서는 이후 background `start`/`resume` 전에 각 companion repo 경로를 다시 명시적으로 승인해야 합니다
 - 이 모델에서 TSV 의 `commit` 열은 계속 primary repo 의 commit 만 기록하고, companion repo 별 commit provenance 는 `autoresearch-state.json` 에 저장됩니다
 - 이후 각 `background` managed runtime cycle 은 runtime prompt 를 stdin 으로 전달하는 비대화형 `codex exec` 세션으로 실행됩니다
-- `execution_policy` 는 중첩 Codex 세션을 시작하는 경로, 즉 `background` 와 `exec` 에만 적용됩니다. 이 skill 의 기본값은 `danger_full_access` 입니다
+- `execution_policy` 는 중첩 Codex 세션을 시작하는 경로, 즉 `background` 와 `exec` 에만 적용됩니다. 이 skill 의 기본값은 이제 `workspace_write` 이며, 호출자가 명시적으로 `danger_full_access` 를 고르지 않는 한 분리된 Codex 세션은 `--full-auto` 로 실행됩니다
 - 이후 `status`, `stop`, `resume` 요청도 계속 같은 `$codex-autoresearch` 를 통해 처리하지만, `status/stop` 은 `background` 에만 적용됩니다
 - `Mode: exec` 는 CI 또는 완전히 지정된 자동화를 위한 고급 경로로 유지됩니다
 

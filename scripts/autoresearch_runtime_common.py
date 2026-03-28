@@ -25,7 +25,7 @@ from autoresearch_lessons import append_summary_lesson_if_needed, lessons_path_f
 
 
 DEFAULT_RESULTS_PATH = "research-results.tsv"
-DEFAULT_EXECUTION_POLICY = "danger_full_access"
+DEFAULT_EXECUTION_POLICY = "workspace_write"
 EXECUTION_POLICY_CHOICES = ("workspace_write", "danger_full_access")
 DEFAULT_HEALTH_MIN_FREE_MB = 500
 

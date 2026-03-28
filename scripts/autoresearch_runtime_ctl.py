@@ -50,7 +50,7 @@ def add_manifest_args(parser: argparse.ArgumentParser) -> None:
         "--execution-policy",
         choices=EXECUTION_POLICY_CHOICES,
         default=DEFAULT_EXECUTION_POLICY,
-        help="How nested Codex sessions should execute. Defaults to danger_full_access.",
+        help="How nested Codex sessions should execute. Defaults to workspace_write.",
     )
     parser.add_argument("--iterations", type=int)
     parser.add_argument("--run-tag")
@@ -93,6 +93,15 @@ def add_runtime_start_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--min-free-mb", type=int, default=DEFAULT_HEALTH_MIN_FREE_MB)
     parser.add_argument("--codex-bin", default="codex")
     parser.add_argument("--codex-arg", action="append", default=[])
+    parser.add_argument(
+        "--allow-companion-repo",
+        action="append",
+        default=[],
+        help=(
+            "Explicitly allow a companion repo from a previously confirmed launch manifest. "
+            "May be repeated."
+        ),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
