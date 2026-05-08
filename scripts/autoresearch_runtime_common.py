@@ -30,6 +30,18 @@ EXECUTION_POLICY_CHOICES = ("workspace_write", "danger_full_access")
 DEFAULT_HEALTH_MIN_FREE_MB = 500
 
 
+def resolve_codex_bin_for_repo(repo: Path, requested_codex_bin: str | None) -> str:
+    candidate = (requested_codex_bin or "codex").strip() or "codex"
+    if candidate != "codex":
+        return candidate
+
+    ollama_wrapper = repo / "scripts" / "codex-with-ollama.sh"
+    if ollama_wrapper.is_file() and os.access(ollama_wrapper, os.X_OK):
+        return str(ollama_wrapper)
+
+    return candidate
+
+
 def parse_key_value_pairs(values: list[str]) -> dict[str, str]:
     parsed: dict[str, str] = {}
     for value in values:

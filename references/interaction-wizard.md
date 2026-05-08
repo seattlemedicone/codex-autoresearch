@@ -23,6 +23,7 @@ When this file mentions `<skill-root>`, it means the directory containing the lo
 9. The user should never see raw field names (Goal, Scope, Metric, Direction, Verify, Guard). Translate everything into natural conversation.
 10. After the user approves the summary, follow the chosen run mode directly from the same skill entrypoint. Foreground stays in the current session; background persists the confirmed launch manifest and starts the runtime controller. Do not tell the user to switch to a different wrapper command.
 11. End the confirmation summary with a short runtime checklist that reinforces execution order: baseline first, then initialize artifacts, and always log a completed experiment before starting the next one.
+12. If the repo includes an executable `scripts/codex-with-ollama.sh`, assume background runs will use that local Ollama wrapper by default. Mention a different provider only when the user asks or the repo lacks the wrapper.
 
 ## Clarification Protocol
 

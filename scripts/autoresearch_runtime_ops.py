@@ -44,6 +44,7 @@ from autoresearch_runtime_common import (
     manifest_config_from_args,
     parse_key_value_pairs,
     persist_runtime,
+    resolve_codex_bin_for_repo,
     resolve_repo_path,
     resolve_repo_relative,
 )
@@ -405,8 +406,9 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
     log_path = resolve_repo_relative(repo, args.log_path, default_runtime_log_path(repo))
     state_path_arg = args.state_path
 
-    if not command_is_executable(args.codex_bin):
-        raise AutoresearchError(f"Codex executable is not available: {args.codex_bin}")
+    codex_bin = resolve_codex_bin_for_repo(repo, args.codex_bin)
+    if not command_is_executable(codex_bin):
+        raise AutoresearchError(f"Codex executable is not available: {codex_bin}")
 
     ensure_runtime_not_running(runtime_path)
 
@@ -477,7 +479,7 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
         "--max-stagnation",
         str(args.max_stagnation),
         "--codex-bin",
-        args.codex_bin,
+        codex_bin,
     ]
     if state_path_arg:
         command.extend(["--state-path", state_path_arg])
@@ -646,16 +648,17 @@ def run_runtime(args: argparse.Namespace) -> int:
             state_path=Path(launch_context["state_path"]),
         )
         runtime.pop("last_error", None)
-        if not command_is_executable(args.codex_bin):
+        codex_bin = resolve_codex_bin_for_repo(repo, args.codex_bin)
+        if not command_is_executable(codex_bin):
             return mark_runtime_needs_human(
                 runtime=runtime,
                 runtime_path=runtime_path,
                 launch_context=launch_context,
                 reason="codex_exec_unavailable",
-                error=f"Codex executable is not available: {args.codex_bin}",
+                error=f"Codex executable is not available: {codex_bin}",
             )
         codex_cmd = build_codex_exec_command(
-            codex_bin=args.codex_bin,
+            codex_bin=codex_bin,
             codex_args=codex_args,
             repo=repo,
         )
