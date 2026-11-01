@@ -19,6 +19,7 @@ from autoresearch_helpers import (
     parse_results_log,
     repo_commit_map_for_targets,
     repo_targets_from_config,
+    record_provider_cost,
     require_consistent_state,
     resolve_state_path_for_log,
     results_repo_root,
@@ -45,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--status", required=True, choices=STATUSES)
     parser.add_argument("--metric")
     parser.add_argument("--commit", default="-")
+    parser.add_argument(
+        "--provider-cost-usd",
+        help="Measured provider charge for this iteration; required for nightly technical-debt runs.",
+    )
     parser.add_argument("--guard", default="-")
     parser.add_argument("--description", required=True)
     parser.add_argument(
@@ -78,6 +83,20 @@ def main() -> int:
     next_iteration = reconstructed["iteration"] + 1
     current_metric = reconstructed["current_metric"]
     config = dict(payload.get("config", {}))
+    run_metadata = payload.get("run_metadata") or config.get("run_metadata")
+    if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
+        if args.provider_cost_usd is None:
+            raise AutoresearchError(
+                "Nightly technical-debt iterations require measured --provider-cost-usd."
+            )
+        # Validate and reserve the measured charge before appending the row so
+        # a ceiling violation cannot create an unaccounted iteration.
+        updated_run_metadata = record_provider_cost(
+            run_metadata,
+            cost_usd=args.provider_cost_usd,
+        )
+    else:
+        updated_run_metadata = None
 
     if args.status in {"crash", "no-op", "blocked", "refine", "pivot", "search"}:
         metric = current_metric if args.metric is None else parse_decimal(args.metric, "metric")
@@ -139,6 +158,10 @@ def main() -> int:
         repo_commit_map=repo_commit_map,
         labels=normalized_labels,
     )
+    if updated_run_metadata is not None:
+        final_payload["config"]["run_metadata"] = updated_run_metadata
+        final_payload["run_metadata"] = updated_run_metadata
+        final_payload["state"]["run_metadata"] = updated_run_metadata
     write_json_atomic(state_path, final_payload)
 
     append_iteration_lesson(
@@ -161,6 +184,11 @@ def main() -> int:
                 "trial_repo_commits": final_payload["state"].get("last_trial_repo_commits", {}),
                 "results_path": str(results_path),
                 "state_path": str(state_path),
+                **(
+                    {"measured_provider_cost_usd": updated_run_metadata["cost"]["measured_usd"]}
+                    if updated_run_metadata is not None
+                    else {}
+                ),
             },
             indent=2,
             sort_keys=True,

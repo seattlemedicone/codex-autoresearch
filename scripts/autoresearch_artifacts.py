@@ -27,6 +27,12 @@ from autoresearch_core import (
     utc_now,
     REQUIRED_STATE_FIELDS,
 )
+from autoresearch_nightly import (
+    NIGHTLY_RUN_KIND,
+    complete_goal_metadata,
+    checkpoint_run_metadata,
+    validate_nightly_run_metadata,
+)
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -58,6 +64,9 @@ def read_state_payload(path: Path) -> dict[str, Any]:
         raise AutoresearchError(
             f"Invalid state JSON in {path}: missing state fields: {', '.join(missing_fields)}"
         )
+    run_metadata = payload.get("run_metadata") or state.get("run_metadata") or config.get("run_metadata")
+    if run_metadata is not None and isinstance(run_metadata, dict) and run_metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+        validate_nightly_run_metadata(run_metadata)
     return payload
 
 
@@ -71,6 +80,9 @@ def read_launch_manifest(path: Path) -> dict[str, Any]:
         raise AutoresearchError(f"Invalid launch manifest in {path}: missing original_goal")
     if not isinstance(payload.get("config"), dict):
         raise AutoresearchError(f"Invalid launch manifest in {path}: config must be an object")
+    run_metadata = payload.get("run_metadata") or payload["config"].get("run_metadata")
+    if run_metadata is not None and isinstance(run_metadata, dict) and run_metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+        validate_nightly_run_metadata(run_metadata)
     return payload
 
 
@@ -469,6 +481,7 @@ def build_state_payload(
     supervisor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     session_mode = config.get("session_mode")
+    run_metadata = config.get("run_metadata")
     payload = {
         "version": 1,
         "run_tag": run_tag or "",
@@ -496,6 +509,11 @@ def build_state_payload(
         },
         "updated_at": utc_now(),
     }
+    if isinstance(run_metadata, dict):
+        if run_metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+            validate_nightly_run_metadata(run_metadata)
+        payload["run_metadata"] = deepcopy(run_metadata)
+        payload["state"]["run_metadata"] = deepcopy(run_metadata)
     last_repo_commits = summary.get("last_repo_commits")
     if isinstance(last_repo_commits, dict) and last_repo_commits:
         payload["state"]["last_repo_commits"] = deepcopy(last_repo_commits)
@@ -548,12 +566,16 @@ def build_launch_manifest(
     prompt_text: str | None = None,
     notes: list[str] | None = None,
 ) -> dict[str, Any]:
+    run_metadata = config.get("run_metadata")
+    if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+        validate_nightly_run_metadata(run_metadata)
     return {
         "version": 1,
         "mode": mode,
         "original_goal": original_goal,
         "prompt_text": prompt_text or "",
         "config": deepcopy(config),
+        "run_metadata": deepcopy(run_metadata) if isinstance(run_metadata, dict) else {},
         "approvals": deepcopy(approvals or {}),
         "defaults": deepcopy(defaults or {}),
         "resume_seed": deepcopy(resume_seed or {}),
@@ -580,9 +602,10 @@ def build_runtime_payload(
     last_reason: str | None = None,
     last_seen_iteration: int | None = None,
     last_seen_status: str | None = None,
+    run_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     now = utc_now()
-    return {
+    payload = {
         "version": 1,
         "repo": str(repo),
         "launch_path": str(launch_path),
@@ -602,6 +625,11 @@ def build_runtime_payload(
         "created_at": now,
         "updated_at": now,
     }
+    if isinstance(run_metadata, dict):
+        if run_metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+            validate_nightly_run_metadata(run_metadata)
+        payload["run_metadata"] = deepcopy(run_metadata)
+    return payload
 
 
 def require_consistent_state(
@@ -698,3 +726,45 @@ def sync_state_session_mode(
     )
     write_json_atomic(path, updated)
     return updated
+
+
+def update_state_run_metadata(path: Path, run_metadata: dict[str, Any]) -> dict[str, Any]:
+    payload = read_state_payload(path)
+    if run_metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+        validate_nightly_run_metadata(run_metadata)
+    payload["run_metadata"] = deepcopy(run_metadata)
+    payload["state"]["run_metadata"] = deepcopy(run_metadata)
+    payload["config"]["run_metadata"] = deepcopy(run_metadata)
+    payload["updated_at"] = utc_now()
+    write_json_atomic(path, payload)
+    return payload
+
+
+def checkpoint_state(
+    path: Path,
+    *,
+    reason: str,
+    saved_at: str | None = None,
+) -> dict[str, Any]:
+    payload = read_state_payload(path)
+    run_metadata = payload.get("run_metadata") or payload.get("config", {}).get("run_metadata")
+    if not isinstance(run_metadata, dict) or run_metadata.get("run_kind") != NIGHTLY_RUN_KIND:
+        raise AutoresearchError("Checkpointing requires nightly run metadata in existing state.")
+    updated_metadata = checkpoint_run_metadata(run_metadata, reason=reason, saved_at=saved_at)
+    return update_state_run_metadata(path, updated_metadata)
+
+
+def complete_state_goal(
+    path: Path,
+    *,
+    reason: str,
+    completed_at: str | None = None,
+) -> dict[str, Any]:
+    payload = read_state_payload(path)
+    run_metadata = payload.get("run_metadata") or payload.get("config", {}).get("run_metadata")
+    if not isinstance(run_metadata, dict) or run_metadata.get("run_kind") != NIGHTLY_RUN_KIND:
+        raise AutoresearchError("Completing a Goal requires nightly run metadata in existing state.")
+    goal = run_metadata.get("goal")
+    updated_metadata = deepcopy(run_metadata)
+    updated_metadata["goal"] = complete_goal_metadata(goal, reason=reason, completed_at=completed_at)
+    return update_state_run_metadata(path, updated_metadata)

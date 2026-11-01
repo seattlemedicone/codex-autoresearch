@@ -540,6 +540,45 @@ Human-facing usage now has a single entrypoint: **`$codex-autoresearch`**.
 - `status` and `stop` are background-only controls. Foreground runs stay in the current session and therefore do not use runtime controller artifacts.
 - `Mode: exec` remains the advanced / CI path for fully specified non-interactive runs.
 
+### Paused nightly technical-debt workflow
+
+The bounded technical-debt workflow is a control-plane configuration, not an
+activation request. An explicit nightly manifest stores its Goal lifecycle,
+Luna-only deep route, Pacific window, measured USD 25 provider-cost ceiling,
+candidate isolation, and review authority in the existing
+`autoresearch-launch.json` and `autoresearch-state.json` artifacts. New nightly
+manifests are always `activation=paused`; the runtime refuses to start until a
+separate production approval changes that state. No schedule is created or
+enabled by this repository.
+
+The intended window is 20:00 through 05:30 in
+`America/Los_Angeles`. The runtime does not launch a new candidate at or after
+cutoff. If a candidate is active, it checkpoints the candidate metadata in the
+existing state JSON so a later approved run can resume it. Each candidate must
+use a fresh worktree and its own branch and pull request. Only a
+`ready_for_review` PR is authoritative; merge, deploy, and online review are
+disabled. Every nightly iteration must report its measured charge through the
+existing iteration helper, and cumulative charges cannot exceed USD 25.
+
+#### Required manual prompt testing and enrollment
+
+Before any production approval, manually exercise the prompt contract in a
+clean, disposable worktree for each enrolled project. Use the existing
+`$codex-autoresearch` entrypoint with a technical-debt prompt and confirm that
+the response and persisted artifacts show: Goal creation metadata; Luna deep
+only; fresh candidate worktree and separate PR; ready-for-review PR authority;
+cutoff checkpoint/resume; measured cost accounting; and no merge, deploy, or
+online review action. Test both a pre-cutoff continuation and a post-cutoff
+resume from the saved checkpoint. Do not use a background launch for this
+manual test.
+
+The four enrolled repositories are the routing kit, `codex-skills`,
+`codex-autoresearch`, and Case Reviewer. The `codex-autoresearch` repository
+must also be enrolled as its own nested project so its project-local prompt
+and state behavior are tested independently of the routing kit. Schedule
+activation remains blocked until all four manual checks, production review,
+and an explicit approval are complete.
+
 
 ---
 
