@@ -540,44 +540,26 @@ Human-facing usage now has a single entrypoint: **`$codex-autoresearch`**.
 - `status` and `stop` are background-only controls. Foreground runs stay in the current session and therefore do not use runtime controller artifacts.
 - `Mode: exec` remains the advanced / CI path for fully specified non-interactive runs.
 
-### Paused nightly technical-debt workflow
+### Paused nightly technical-debt metadata
 
-The bounded technical-debt workflow is a control-plane configuration, not an
-activation request. An explicit nightly manifest stores its Goal lifecycle,
-Luna-only deep route, Pacific window, measured USD 25 provider-cost ceiling,
-candidate isolation, and review authority in the existing
-`autoresearch-launch.json` and `autoresearch-state.json` artifacts. New nightly
-manifests are always `activation=paused`; the runtime refuses to start until a
-separate production approval changes that state. No schedule is created or
-enabled by this repository.
+The optional `--nightly-technical-debt` helper flag creates **metadata only** in
+`autoresearch-launch.json` or `autoresearch-state.json`. It records Goal
+lifecycle, intended Luna/deep routing, a 20:00–05:30 Pacific window, a USD 25
+cost ceiling, candidate identities, and PR-only authority. Metadata helpers can
+record charges and checkpoints; they do not measure provider charges, create
+candidate worktrees or PRs, supervise a running child, or create schedules.
 
-The intended window is 20:00 through 05:30 in
-`America/Los_Angeles`. The runtime does not launch a new candidate at or after
-cutoff. If a candidate is active, it checkpoints the candidate metadata in the
-existing state JSON so a later approved run can resume it. Each candidate must
-use a fresh worktree and its own branch and pull request. Only a
-`ready_for_review` PR is authoritative; merge, deploy, and online review are
-disabled. Every nightly iteration must report its measured charge through the
-existing iteration helper, and cumulative charges cannot exceed USD 25.
+Nightly execution is unavailable. The runtime start/run commands and resume
+prompt generator refuse nightly launch or state metadata, including manifests
+whose activation and approval flags have been changed. Ordinary autoresearch
+runs remain available. Window helpers require timezone-aware timestamps and
+convert them to `America/Los_Angeles` before evaluating the cutoff.
 
-#### Required manual prompt testing and enrollment
-
-Before any production approval, manually exercise the prompt contract in a
-clean, disposable worktree for each enrolled project. Use the existing
-`$codex-autoresearch` entrypoint with a technical-debt prompt and confirm that
-the response and persisted artifacts show: Goal creation metadata; Luna deep
-only; fresh candidate worktree and separate PR; ready-for-review PR authority;
-cutoff checkpoint/resume; measured cost accounting; and no merge, deploy, or
-online review action. Test both a pre-cutoff continuation and a post-cutoff
-resume from the saved checkpoint. Do not use a background launch for this
-manual test.
-
-The four enrolled repositories are the routing kit, `codex-skills`,
-`codex-autoresearch`, and Case Reviewer. The `codex-autoresearch` repository
-must also be enrolled as its own nested project so its project-local prompt
-and state behavior are tested independently of the routing kit. Schedule
-activation remains blocked until all four manual checks, production review,
-and an explicit approval are complete.
+Future activation requires implementing and testing actual provider selection,
+active-child cutoff/checkpoint supervision, measured billing integration, and
+candidate isolation. Project enrollment, manual prompt testing, production
+review, and explicit activation approval remain separate future work. Merging
+this metadata scaffolding does not enroll any project or enable a nightly run.
 
 
 ---

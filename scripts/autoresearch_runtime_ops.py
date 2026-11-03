@@ -7,7 +7,6 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,25 +15,19 @@ from autoresearch_helpers import (
     archive_path_to_prev,
     build_launch_manifest,
     build_runtime_payload,
-    checkpoint_state,
-    complete_state_goal,
     command_is_executable,
     default_launch_manifest_path,
     default_runtime_log_path,
     default_runtime_state_path,
     repo_targets_from_config,
     read_launch_manifest,
-    read_state_payload,
+    reject_nightly_state,
+    reject_nightly_runtime,
     resolve_repo_target_path,
     resolve_state_path,
     resolve_state_path_for_log,
     sync_state_session_mode,
     utc_now,
-    enforce_nightly_activation,
-    evaluate_nightly_launch_window,
-    provider_cost_gate,
-    ready_pr_authority,
-    validate_nightly_run_metadata,
     write_json_atomic,
 )
 from autoresearch_launch_gate import evaluate_launch_context, pid_is_alive
@@ -437,9 +430,9 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
 
     launch_manifest = read_launch_manifest(launch_path)
     run_metadata = launch_manifest.get("config", {}).get("run_metadata")
-    if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
-        validate_nightly_run_metadata(run_metadata, primary_repo=repo)
-        enforce_nightly_activation(run_metadata, launch_manifest.get("approvals"))
+    reject_nightly_runtime(launch_manifest)
+    state_path = Path(launch_context["state_path"])
+    reject_nightly_state(state_path)
     repo_targets = validate_runtime_repo_targets(
         repo=repo,
         launch_manifest=launch_manifest,
@@ -580,9 +573,7 @@ def run_runtime(args: argparse.Namespace) -> int:
     launch_path = resolve_repo_relative(repo, args.launch_path, default_launch_manifest_path(repo))
     launch_manifest = read_launch_manifest(launch_path)
     run_metadata = launch_manifest.get("config", {}).get("run_metadata")
-    if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
-        validate_nightly_run_metadata(run_metadata, primary_repo=repo)
-        enforce_nightly_activation(run_metadata, launch_manifest.get("approvals"))
+    reject_nightly_runtime(launch_manifest)
     repo_targets = validate_runtime_repo_targets(
         repo=repo,
         launch_manifest=launch_manifest,
@@ -592,6 +583,8 @@ def run_runtime(args: argparse.Namespace) -> int:
     runtime_path = resolve_repo_relative(repo, args.runtime_path, default_runtime_state_path(repo))
     log_path = resolve_repo_relative(repo, args.log_path, default_runtime_log_path(repo))
     state_path_arg = args.state_path
+    state_path = resolve_state_path_for_log(state_path_arg, None, cwd=repo)
+    reject_nightly_state(state_path)
     runtime = load_runtime_if_exists(runtime_path)
     if runtime is None:
         runtime = build_runtime_payload(
@@ -617,35 +610,8 @@ def run_runtime(args: argparse.Namespace) -> int:
     )
     startup_failure_count = 0
     while True:
-        state_candidate_path = resolve_state_path(state_path_arg, mode="loop", cwd=repo)
-        if state_candidate_path.exists():
-            state_payload = read_state_payload(state_candidate_path)
-            state_metadata = state_payload.get("run_metadata") or state_payload.get("config", {}).get("run_metadata")
-            if isinstance(state_metadata, dict) and state_metadata.get("run_kind") == "nightly_technical_debt":
-                run_metadata = state_metadata
-        if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
-            window = evaluate_nightly_launch_window(datetime.now())
-            cost = provider_cost_gate(run_metadata)
-            active_candidate = run_metadata.get("active_candidate")
-            candidate_authority = ready_pr_authority(active_candidate) if isinstance(active_candidate, dict) else None
-            if isinstance(active_candidate, dict) and active_candidate.get("pr_state") not in {None, "pending", "in_progress", "ready_for_review"} and not candidate_authority["allowed"]:
-                return mark_runtime_needs_human(
-                    runtime=runtime,
-                    runtime_path=runtime_path,
-                    launch_context={"reason": "candidate_pr_not_ready_for_review"},
-                    reason="candidate_pr_not_ready_for_review",
-                )
-            if window["stop_launching"] or cost["measured_usd"] >= cost["ceiling_usd"]:
-                reason = "nightly_cutoff_reached" if window["stop_launching"] else "nightly_provider_cost_ceiling_reached"
-                state_path = state_candidate_path
-                if state_path.exists():
-                    checkpoint_state(state_path, reason=reason)
-                runtime["status"] = "paused"
-                runtime["terminal_reason"] = reason
-                runtime["last_decision"] = "pause"
-                runtime["last_reason"] = reason
-                persist_runtime(runtime_path, runtime)
-                return 0
+        state_candidate_path = resolve_state_path_for_log(state_path_arg, None, cwd=repo)
+        reject_nightly_state(state_candidate_path)
         launch_context = evaluate_launch_context(
             results_path=results_path,
             state_path_arg=state_path_arg,
@@ -753,20 +719,6 @@ def run_runtime(args: argparse.Namespace) -> int:
         runtime["launch_context"] = launch_context
 
         if decision == "relaunch":
-            if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
-                window = evaluate_nightly_launch_window(datetime.now())
-                cost = provider_cost_gate(run_metadata)
-                if window["stop_launching"] or cost["measured_usd"] >= cost["ceiling_usd"]:
-                    reason = "nightly_cutoff_reached" if window["stop_launching"] else "nightly_provider_cost_ceiling_reached"
-                    state_path = state_candidate_path
-                    if state_path.exists():
-                        checkpoint_state(state_path, reason=reason)
-                    runtime["status"] = "paused"
-                    runtime["terminal_reason"] = reason
-                    runtime["last_decision"] = "pause"
-                    runtime["last_reason"] = reason
-                    persist_runtime(runtime_path, runtime)
-                    return 0
             runtime["status"] = "running"
             runtime["terminal_reason"] = "none"
             persist_runtime(runtime_path, runtime)
@@ -778,10 +730,6 @@ def run_runtime(args: argparse.Namespace) -> int:
                 results_path=results_path,
                 state_path=Path(str(runtime["state_path"])),
             )
-            if decision == "stop" and isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
-                state_path = Path(str(runtime["state_path"]))
-                if state_path.exists():
-                    complete_state_goal(state_path, reason=reason)
 
         runtime["status"] = "terminal" if decision == "stop" else "needs_human"
         runtime["terminal_reason"] = reason

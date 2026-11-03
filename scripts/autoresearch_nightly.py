@@ -173,24 +173,28 @@ def validate_nightly_run_metadata(
 
 def enforce_nightly_activation(metadata: dict[str, Any], approvals: dict[str, Any] | None = None) -> None:
     validate_nightly_run_metadata(metadata)
-    schedule = metadata["schedule"]
-    approvals = approvals if isinstance(approvals, dict) else {}
-    production_approved = schedule.get("production_approved") is True and approvals.get("production") in {
-        True,
-        "true",
-        "yes",
-        "approved",
-    }
-    if schedule.get("activation") != "approved" or not production_approved:
-        raise AutoresearchError(
-            "Nightly technical-debt launch is paused until explicit production approval."
-        )
+    raise AutoresearchError(
+        "Nightly technical-debt launch is paused: runtime activation is not implemented. "
+        "Approval flags cannot enable this metadata-only workflow."
+    )
+
+
+def reject_nightly_runtime(*payloads: dict[str, Any]) -> None:
+    for payload in payloads:
+        for section in (payload, payload.get("config"), payload.get("state")):
+            if not isinstance(section, dict):
+                continue
+            metadata = section.get("run_metadata")
+            if isinstance(metadata, dict) and metadata.get("run_kind") == NIGHTLY_RUN_KIND:
+                enforce_nightly_activation(metadata)
 
 
 def nightly_window_status(moment: datetime) -> str:
     """Return before_window, within_window, or cutoff_reached for Pacific time."""
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise AutoresearchError("Nightly window checks require a timezone-aware timestamp.")
     zone = ZoneInfo(NIGHTLY_TIMEZONE)
-    local = moment.replace(tzinfo=zone) if moment.tzinfo is None else moment.astimezone(zone)
+    local = moment.astimezone(zone)
     current = local.time().replace(second=0, microsecond=0)
     start = time(20, 0)
     cutoff = time(5, 30)

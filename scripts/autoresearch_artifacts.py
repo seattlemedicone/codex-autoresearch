@@ -31,6 +31,7 @@ from autoresearch_nightly import (
     NIGHTLY_RUN_KIND,
     complete_goal_metadata,
     checkpoint_run_metadata,
+    reject_nightly_runtime,
     validate_nightly_run_metadata,
 )
 
@@ -42,6 +43,16 @@ def read_json(path: Path) -> dict[str, Any]:
         raise AutoresearchError(f"Missing JSON file: {path}") from exc
     except json.JSONDecodeError as exc:
         raise AutoresearchError(f"Invalid JSON in {path}: {exc}") from exc
+
+
+def reject_nightly_state(path: Path) -> None:
+    try:
+        payload = read_json(path)
+    except (AutoresearchError, OSError):
+        # The launch gate can recover ordinary runs from TSV after an interrupted JSON write.
+        return
+    if isinstance(payload, dict):
+        reject_nightly_runtime(payload)
 
 
 def read_state_payload(path: Path) -> dict[str, Any]:

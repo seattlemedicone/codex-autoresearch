@@ -18,6 +18,7 @@ from autoresearch_artifacts import (
     read_launch_manifest,
     read_runtime_payload,
     read_state_payload,
+    reject_nightly_state,
     require_consistent_state,
     row_to_dict,
     sync_state_payload_session_mode,
@@ -117,11 +118,14 @@ from autoresearch_nightly import (
     ready_pr_authority,
     record_provider_cost,
     register_candidate,
+    reject_nightly_runtime,
     validate_candidate_isolation,
     validate_nightly_run_metadata,
 )
 
 __all__ = [
+    "reject_nightly_runtime",
+    "reject_nightly_state",
     "AUTORESEARCH_OWNED_BASENAMES",
     "AutoresearchError",
     "ENV_ASSIGNMENT_RE",

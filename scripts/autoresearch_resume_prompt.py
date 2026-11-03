@@ -9,6 +9,8 @@ from autoresearch_helpers import (
     format_repo_target_label,
     repo_targets_from_config,
     read_launch_manifest,
+    reject_nightly_state,
+    reject_nightly_runtime,
     resolve_repo_path,
     resolve_repo_relative,
     results_repo_root,
@@ -45,6 +47,8 @@ def build_runtime_prompt(
     results_path: Path,
     state_path: Path,
 ) -> str:
+    reject_nightly_runtime(launch_manifest)
+    reject_nightly_state(state_path)
     decision = launch_context["decision"]
     strategy = launch_context["resume_strategy"]
     config = launch_manifest["config"]
@@ -76,19 +80,6 @@ def build_runtime_prompt(
         value = config.get(field_name)
         if value not in (None, "", []):
             lines.append(f"{label}: {value}")
-    run_metadata = launch_manifest.get("run_metadata") or config.get("run_metadata")
-    if isinstance(run_metadata, dict) and run_metadata.get("run_kind") == "nightly_technical_debt":
-        lines.extend(
-            [
-                "Nightly control metadata: Goal-backed technical-debt run.",
-                "Routing: Luna deep only; candidate worktrees and PRs must remain separate.",
-                "Authority: ready-for-review PR only; do not merge, deploy, or use online review.",
-                "Window: 20:00-05:30 America/Los_Angeles; stop launching before cutoff and checkpoint active candidates.",
-                "Provider cost: measured USD ceiling of 25; record each charge through the existing state helper.",
-                f"Checkpoint: {run_metadata.get('checkpoint') or 'none'}",
-            ]
-        )
-
     lines.extend(
         [
             "",
@@ -106,7 +97,6 @@ def build_runtime_prompt(
             "- When initializing fresh artifacts for this managed run, call autoresearch_init_run.py with --session-mode background.",
             "- Continue autonomously until a terminal condition or blocker is reached.",
             "- Keep all run-control decisions aligned with the launch manifest and current state.",
-            "- For nightly technical-debt runs, preserve run_metadata in autoresearch-state.json and resume from its checkpoint.",
         ]
     )
     return "\n".join(lines).strip() + "\n"
