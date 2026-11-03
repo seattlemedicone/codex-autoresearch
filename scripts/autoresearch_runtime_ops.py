@@ -21,6 +21,8 @@ from autoresearch_helpers import (
     default_runtime_state_path,
     repo_targets_from_config,
     read_launch_manifest,
+    reject_nightly_state,
+    reject_nightly_runtime,
     resolve_repo_target_path,
     resolve_state_path,
     resolve_state_path_for_log,
@@ -251,7 +253,7 @@ def runtime_summary(
             "last_commit_gate": runtime.get("last_commit_gate"),
         }
 
-    if runtime is not None and runtime.get("status") in {"terminal", "needs_human", "stopped"}:
+    if runtime is not None and runtime.get("status") in {"terminal", "needs_human", "stopped", "paused"}:
         return persisted_runtime_summary(
             runtime=runtime,
             runtime_path=runtime_path,
@@ -427,6 +429,10 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
         raise AutoresearchError(f"Missing JSON file: {launch_path}")
 
     launch_manifest = read_launch_manifest(launch_path)
+    run_metadata = launch_manifest.get("config", {}).get("run_metadata")
+    reject_nightly_runtime(launch_manifest)
+    state_path = Path(launch_context["state_path"])
+    reject_nightly_state(state_path)
     repo_targets = validate_runtime_repo_targets(
         repo=repo,
         launch_manifest=launch_manifest,
@@ -510,6 +516,7 @@ def start_runtime(args: argparse.Namespace, *, runner_path: Path) -> dict[str, A
         pgid=pgid,
         command=command,
         terminal_reason="none",
+        run_metadata=run_metadata if isinstance(run_metadata, dict) else None,
     )
     runtime["launch_context"] = launch_context
     runtime["last_health_check"] = preflight["health_check"]
@@ -565,6 +572,8 @@ def run_runtime(args: argparse.Namespace) -> int:
     repo = resolve_repo_path(args.repo)
     launch_path = resolve_repo_relative(repo, args.launch_path, default_launch_manifest_path(repo))
     launch_manifest = read_launch_manifest(launch_path)
+    run_metadata = launch_manifest.get("config", {}).get("run_metadata")
+    reject_nightly_runtime(launch_manifest)
     repo_targets = validate_runtime_repo_targets(
         repo=repo,
         launch_manifest=launch_manifest,
@@ -574,6 +583,8 @@ def run_runtime(args: argparse.Namespace) -> int:
     runtime_path = resolve_repo_relative(repo, args.runtime_path, default_runtime_state_path(repo))
     log_path = resolve_repo_relative(repo, args.log_path, default_runtime_log_path(repo))
     state_path_arg = args.state_path
+    state_path = resolve_state_path_for_log(state_path_arg, None, cwd=repo)
+    reject_nightly_state(state_path)
     runtime = load_runtime_if_exists(runtime_path)
     if runtime is None:
         runtime = build_runtime_payload(
@@ -586,6 +597,7 @@ def run_runtime(args: argparse.Namespace) -> int:
             pid=os.getpid(),
             pgid=os.getpgid(0),
             command=[],
+            run_metadata=run_metadata if isinstance(run_metadata, dict) else None,
         )
         persist_runtime(runtime_path, runtime)
 
@@ -598,6 +610,8 @@ def run_runtime(args: argparse.Namespace) -> int:
     )
     startup_failure_count = 0
     while True:
+        state_candidate_path = resolve_state_path_for_log(state_path_arg, None, cwd=repo)
+        reject_nightly_state(state_candidate_path)
         launch_context = evaluate_launch_context(
             results_path=results_path,
             state_path_arg=state_path_arg,

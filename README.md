@@ -540,6 +540,27 @@ Human-facing usage now has a single entrypoint: **`$codex-autoresearch`**.
 - `status` and `stop` are background-only controls. Foreground runs stay in the current session and therefore do not use runtime controller artifacts.
 - `Mode: exec` remains the advanced / CI path for fully specified non-interactive runs.
 
+### Paused nightly technical-debt metadata
+
+The optional `--nightly-technical-debt` helper flag creates **metadata only** in
+`autoresearch-launch.json` or `autoresearch-state.json`. It records Goal
+lifecycle, intended Luna/deep routing, a 20:00–05:30 Pacific window, a USD 25
+cost ceiling, candidate identities, and PR-only authority. Metadata helpers can
+record charges and checkpoints; they do not measure provider charges, create
+candidate worktrees or PRs, supervise a running child, or create schedules.
+
+Nightly execution is unavailable. The runtime start/run commands and resume
+prompt generator refuse nightly launch or state metadata, including manifests
+whose activation and approval flags have been changed. Ordinary autoresearch
+runs remain available. Window helpers require timezone-aware timestamps and
+convert them to `America/Los_Angeles` before evaluating the cutoff.
+
+Future activation requires implementing and testing actual provider selection,
+active-child cutoff/checkpoint supervision, measured billing integration, and
+candidate isolation. Project enrollment, manual prompt testing, production
+review, and explicit activation approval remain separate future work. Merging
+this metadata scaffolding does not enroll any project or enable a nightly run.
+
 
 ---
 

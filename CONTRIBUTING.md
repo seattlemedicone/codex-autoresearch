@@ -165,6 +165,11 @@ bash scripts/run_contributor_gate.sh skill
 
 `docs` is the lightweight structure check. `skill` is the real automated contributor gate: structure validation, helper/invariant unit tests, and a disposable `codex exec` smoke run.
 
+The exec smoke uses native workspace-write automatic approval (`--approve-for-me`)
+by default and inherits the configured model and provider. The separate
+`--dangerous` harness option is an explicit opt-in for an externally isolated
+environment; the contributor gate does not use it.
+
 For real skill-level validation against Codex CLI itself:
 
 ```bash

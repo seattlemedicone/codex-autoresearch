@@ -9,6 +9,7 @@ from typing import Any
 from autoresearch_helpers import (
     AutoresearchError,
     build_repo_targets,
+    build_nightly_run_metadata,
     default_state_path,
     normalize_labels,
     read_state_payload,
@@ -132,6 +133,17 @@ def manifest_config_from_args(args: argparse.Namespace) -> dict[str, Any]:
     required_keep_labels = normalize_labels(getattr(args, "required_keep_label", []))
     if required_keep_labels:
         config["required_keep_labels"] = required_keep_labels
+    if getattr(args, "nightly_technical_debt", False):
+        config["run_metadata"] = build_nightly_run_metadata(
+            title=args.goal,
+            primary_repo=primary_repo,
+            goal_id=getattr(args, "goal_id", None),
+            candidate_worktree_root=(
+                Path(args.candidate_worktree_root)
+                if getattr(args, "candidate_worktree_root", None)
+                else None
+            ),
+        )
     return config
 
 

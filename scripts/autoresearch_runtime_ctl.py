@@ -35,6 +35,13 @@ def add_manifest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--prompt-text")
     parser.add_argument("--mode", default="loop")
     parser.add_argument("--goal", required=True)
+    parser.add_argument(
+        "--nightly-technical-debt",
+        action="store_true",
+        help="Create a paused Goal-backed nightly technical-debt manifest; production activation remains gated.",
+    )
+    parser.add_argument("--goal-id")
+    parser.add_argument("--candidate-worktree-root")
     parser.add_argument("--scope", required=True)
     parser.add_argument(
         "--companion-repo-scope",

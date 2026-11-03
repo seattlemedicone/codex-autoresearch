@@ -586,6 +586,15 @@ Use the same skill entry for follow-up control:
 - ask to stop -> background mode only; the skill stops the runtime controller
 - ask to resume -> the skill checks launch/runtime state and continues if safe
 
+### Paused nightly metadata
+
+The backend `--nightly-technical-debt` flag stores policy and Goal/checkpoint
+metadata for future nightly support. This is metadata-only scaffolding: runtime
+`start`, `run`, and resume-prompt generation reject nightly launch/state files,
+even if their approval flags are set. There is no activation or enrollment
+procedure yet. Provider selection, running-child cutoff/checkpoint supervision,
+and measured billing integration must be implemented before production use.
+
 Advanced backend commands are still available for scripting or debugging:
 
 If you are not automating or debugging the backend directly, ignore the commands below and keep using `$codex-autoresearch`.

@@ -10,6 +10,7 @@ from autoresearch_helpers import (
     AutoresearchError,
     archive_path_to_prev,
     build_repo_targets,
+    build_nightly_run_metadata,
     repo_commit_map_for_targets,
     build_state_payload,
     cleanup_exec_state,
@@ -53,6 +54,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--goal", required=True)
+    parser.add_argument(
+        "--nightly-technical-debt",
+        action="store_true",
+        help="Persist paused Goal-backed nightly technical-debt metadata in the existing state artifact.",
+    )
+    parser.add_argument("--goal-id")
+    parser.add_argument("--candidate-worktree-root")
     parser.add_argument("--scope", required=True)
     parser.add_argument(
         "--companion-repo-scope",
@@ -226,6 +234,17 @@ def main() -> int:
         config["required_stop_labels"] = required_stop_labels
     if required_keep_labels:
         config["required_keep_labels"] = required_keep_labels
+    if args.nightly_technical_debt:
+        config["run_metadata"] = build_nightly_run_metadata(
+            title=args.goal,
+            primary_repo=repo,
+            goal_id=args.goal_id,
+            candidate_worktree_root=(
+                Path(args.candidate_worktree_root)
+                if args.candidate_worktree_root
+                else None
+            ),
+        )
     summary = {
         "iteration": 0,
         "baseline_metric": baseline_metric,

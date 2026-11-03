@@ -9,6 +9,8 @@ from autoresearch_helpers import (
     format_repo_target_label,
     repo_targets_from_config,
     read_launch_manifest,
+    reject_nightly_state,
+    reject_nightly_runtime,
     resolve_repo_path,
     resolve_repo_relative,
     results_repo_root,
@@ -45,6 +47,8 @@ def build_runtime_prompt(
     results_path: Path,
     state_path: Path,
 ) -> str:
+    reject_nightly_runtime(launch_manifest)
+    reject_nightly_state(state_path)
     decision = launch_context["decision"]
     strategy = launch_context["resume_strategy"]
     config = launch_manifest["config"]
@@ -76,7 +80,6 @@ def build_runtime_prompt(
         value = config.get(field_name)
         if value not in (None, "", []):
             lines.append(f"{label}: {value}")
-
     lines.extend(
         [
             "",

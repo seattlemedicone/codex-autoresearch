@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${1:-}"
 KEEP_TEMP=1
-DANGEROUS=1
+DANGEROUS=0
 
 usage() {
   cat <<'EOF'
@@ -23,12 +23,10 @@ Modes:
                      for the interactive wizard + explicit foreground/background choice.
 
 Flags:
-  --dangerous        Legacy alias for the default exec-smoke behavior:
+  --dangerous        Explicitly opt into the legacy unrestricted exec-smoke:
                      pass --dangerously-bypass-approvals-and-sandbox to codex exec
                      inside the disposable temp repo created by this harness.
-  --sandboxed        Force exec-smoke to use --full-auto instead. This is useful for
-                     reproducing sandbox-related blockers, but may fail protocol checks
-                     because git commit/revert writes inside .git are sandboxed.
+  --sandboxed        Use native workspace-write automatic approval (the default).
   --clean            Delete the temp repo after the command finishes successfully.
 EOF
 }
@@ -160,7 +158,7 @@ run_exec_smoke() {
   if [[ "$DANGEROUS" -eq 1 ]]; then
     codex_flags+=(--dangerously-bypass-approvals-and-sandbox)
   else
-    codex_flags+=(--full-auto)
+    codex_flags+=(--approve-for-me)
   fi
 
   if ! codex "${codex_flags[@]}" - < "$repo/prompt.txt" | tee "$event_log"; then
